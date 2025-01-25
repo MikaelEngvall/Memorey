@@ -1,7 +1,31 @@
-import RegularButton from './RegularButton'
-import Select from './Select'
+import { useState } from 'react';
+import io from 'socket.io-client';
+import RegularButton from './RegularButton';
+import Select from './Select';
+
+const socket = io('http://localhost:3000');
 
 export default function Form({ handleSubmit, handleChange }) {
+    const [roomCode, setRoomCode] = useState('');
+    const [isRoomCreated, setIsRoomCreated] = useState(false);
+
+    const createRoom = () => {
+        socket.emit('createRoom', (code) => {
+            setRoomCode(code);
+            setIsRoomCreated(true);
+        });
+    };
+
+    const joinRoom = () => {
+        socket.emit('joinRoom', roomCode, (success) => {
+            if (success) {
+                alert('Joined room successfully');
+            } else {
+                alert('Room not found');
+            }
+        });
+    };
+
     return (
         <div className="form-container">
             <p className="p--regular">
@@ -9,40 +33,28 @@ export default function Form({ handleSubmit, handleChange }) {
             </p>
             <form className="wrapper">
                 <Select handleChange={handleChange} />
-                {
-                    // <div className="form__inner-wrapper">
-                    //     <label htmlFor="category">Select an emoji category</label>
-                    //     <select
-                    //         name="category"
-                    //         id="category"
-                    //         onChange={handleChange}
-                    //     >
-                    //         <option value="animals-and-nature">Animals and nature</option>
-                    //         <option value="food-and-drink">Food and drink</option>
-                    //         <option value="travel-and-places">Travel and places</option>
-                    //         <option value="objects">Objects</option>
-                    //         <option value="symbols">Symbols</option>
-                    //     </select>
-                    // </div>
-                    // <div className="form__inner-wrapper">
-                    //     <label htmlFor="number">Select the number of memory cards</label>
-                    //     <select
-                    //         name="number"
-                    //         id="number"
-                    //         onChange={handleChange}
-                    //     >
-                    //         <option value="10">10</option>
-                    //         <option value="20">20</option>
-                    //         <option value="30">30</option>
-                    //         <option value="40">40</option>
-                    //         <option value="50">50</option>
-                    //     </select>
-                    // </div>
-                }
                 <RegularButton handleClick={handleSubmit}>
                     Start Game
                 </RegularButton>
             </form>
+            <div className="room-container">
+                {isRoomCreated ? (
+                    <p>Room Code: {roomCode}</p>
+                ) : (
+                    <RegularButton handleClick={createRoom}>
+                        Create Room
+                    </RegularButton>
+                )}
+                <input
+                    type="text"
+                    value={roomCode}
+                    onChange={(e) => setRoomCode(e.target.value)}
+                    placeholder="Enter room code"
+                />
+                <RegularButton handleClick={joinRoom}>
+                    Join Room
+                </RegularButton>
+            </div>
         </div>
-    )
+    );
 }
