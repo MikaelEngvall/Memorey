@@ -7,12 +7,22 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:5173", // Update this to match your frontend URL
+    origin: [
+      "http://localhost:5173",
+      "https://3zt1l3c8-5173.euw.devtunnels.ms",
+    ], // Add your forwarded port URL here
     methods: ["GET", "POST"],
   },
 });
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://3zt1l3c8-5173.euw.devtunnels.ms",
+    ], // Add your forwarded port URL here
+  })
+);
 
 const rooms = {};
 
