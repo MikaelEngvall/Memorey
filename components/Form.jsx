@@ -8,19 +8,28 @@ const socket = io('http://localhost:3000');
 export default function Form({ handleSubmit, handleChange }) {
     const [roomCode, setRoomCode] = useState('');
     const [isRoomCreated, setIsRoomCreated] = useState(false);
+    const [connectionStatus, setConnectionStatus] = useState('Disconnected');
 
     useEffect(() => {
         socket.on('connect', () => {
             console.log('Connected to socket server');
+            setConnectionStatus('Connected');
         });
 
         socket.on('disconnect', () => {
             console.log('Disconnected from socket server');
+            setConnectionStatus('Disconnected');
+        });
+
+        socket.on('roomJoined', (roomCode) => {
+            console.log(`Joined room: ${roomCode}`);
+            alert(`Joined room: ${roomCode}`);
         });
 
         return () => {
             socket.off('connect');
             socket.off('disconnect');
+            socket.off('roomJoined');
         };
     }, []);
 
@@ -57,6 +66,7 @@ export default function Form({ handleSubmit, handleChange }) {
                 </RegularButton>
             </form>
             <div className="room-container">
+                <p>Connection Status: {connectionStatus}</p>
                 {isRoomCreated ? (
                     <p>Room Code: {roomCode}</p>
                 ) : (

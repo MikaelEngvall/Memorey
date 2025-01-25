@@ -42,6 +42,7 @@ io.on("connection", (socket) => {
       rooms[roomCode].players.push(socket.id);
       socket.join(roomCode);
       console.log("Client joined room:", roomCode);
+      socket.emit("roomJoined", roomCode);
       callback(true);
     } else {
       console.log("Room not found:", roomCode);
