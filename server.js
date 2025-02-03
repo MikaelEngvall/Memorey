@@ -51,44 +51,93 @@ const rooms = {};
 
 wss.on("connection", (ws) => {
   console.log("Client connected");
+  let roomCode = null; // Track room code for this connection
+  ws.isJoined = false; // Add flag to track if client has joined a room
 
   // Send initial connection confirmation
   ws.send(JSON.stringify({ type: "connected", players: [] }));
 
   ws.on("message", (message) => {
     const data = JSON.parse(message);
+    console.log("Server received:", data);
 
     switch (data.type) {
-      case "createRoom":
-        const roomCode = Math.random().toString(36).substring(2, 7);
+      case "createRoom": {
+        if (ws.isJoined) {
+          ws.send(
+            JSON.stringify({
+              type: "error",
+              message: "Already in a room",
+            })
+          );
+          break;
+        }
+        roomCode = Math.random().toString(36).substring(2, 7);
+        const playerName = data.playerName || "Host";
         rooms[roomCode] = {
-          players: [],
+          players: [
+            {
+              ws,
+              name: playerName,
+              isAdmin: true,
+            },
+          ],
           hostWs: ws,
+          isActive: true, // Add flag to track active rooms
         };
         ws.roomCode = roomCode;
         ws.isHost = true;
+        ws.isJoined = true;
         console.log("Room created with code:", roomCode);
         ws.send(
           JSON.stringify({
             type: "roomCreated",
             roomCode: roomCode,
-            players: [],
+            players: [playerName],
+            isAdmin: true,
           })
         );
         break;
+      }
 
-      case "joinRoom":
+      case "joinRoom": {
+        if (ws.isJoined) {
+          ws.send(
+            JSON.stringify({
+              type: "error",
+              message: "Already in a room",
+            })
+          );
+          break;
+        }
+
         const joinRoomCode = data.roomCode;
         const playerName =
           data.playerName ||
           `Player ${rooms[joinRoomCode]?.players.length + 1}`;
 
         if (rooms[joinRoomCode]) {
+          // Check if player name already exists in room
+          const playerExists = rooms[joinRoomCode].players.some(
+            (p) => p.name === data.playerName
+          );
+
+          if (playerExists) {
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                message: "Player name already exists in room",
+              })
+            );
+            break;
+          }
+
+          const isAdmin = false;
           rooms[joinRoomCode].players.push({
             ws,
             name: playerName,
+            isAdmin,
           });
-          ws.roomCode = joinRoomCode;
 
           // Broadcast to all players in the room
           const playersList = rooms[joinRoomCode].players.map((p) => p.name);
@@ -110,6 +159,7 @@ wss.on("connection", (ws) => {
               players: playersList,
             })
           );
+          ws.isJoined = true;
         } else {
           ws.send(
             JSON.stringify({
@@ -119,58 +169,111 @@ wss.on("connection", (ws) => {
           );
         }
         break;
+      }
 
-      case "startGame":
+      case "startGame": {
         const startRoomCode = data.roomCode;
-        if (rooms[startRoomCode]) {
-          // Store game data in room
+        if (rooms[startRoomCode] && rooms[startRoomCode].isActive) {
           rooms[startRoomCode].gameData = data.gameData;
-          rooms[startRoomCode].emojisData = data.emojisData; // Add this
+          rooms[startRoomCode].emojisData = data.emojisData;
+          rooms[startRoomCode].currentPlayer = 0;
+          rooms[startRoomCode].playerScores = new Array(
+            rooms[startRoomCode].players.length
+          ).fill(0);
+          rooms[startRoomCode].isGameStarted = true;
 
-          // Broadcast game start to all players in the room
           rooms[startRoomCode].players.forEach(({ ws: playerWs }) => {
             playerWs.send(
               JSON.stringify({
                 type: "gameStarted",
                 gameData: data.gameData,
-                emojisData: data.emojisData, // Add this
+                emojisData: data.emojisData,
+                currentPlayer: 0,
+                playerScores: rooms[startRoomCode].playerScores,
               })
             );
           });
+          rooms[startRoomCode].gameStarted = true;
         }
         break;
+      }
 
-      case "cardSelected":
-        const roomCode = data.roomCode;
-        if (rooms[roomCode]) {
-          // Broadcast card selection to all players in room
-          rooms[roomCode].players.forEach(({ ws: playerWs }) => {
-            if (playerWs !== ws) {
+      case "turnCard": {
+        const turnRoomCode = data.roomCode;
+        if (rooms[turnRoomCode]) {
+          // Only allow card flips from current player
+          const playerIndex = rooms[turnRoomCode].players.findIndex(
+            (p) => p.ws === ws
+          );
+          if (playerIndex === rooms[turnRoomCode].currentPlayer) {
+            // Broadcast card flip to all players in room
+            rooms[turnRoomCode].players.forEach(({ ws: playerWs }) => {
               playerWs.send(
                 JSON.stringify({
-                  type: "cardSelected",
+                  type: "cardFlipped",
+                  card: data.card,
                   selectedCards: data.selectedCards,
-                  matchedCards: data.matchedCards,
-                  currentPlayer: data.currentPlayer,
-                  playerScores: data.playerScores,
+                  currentPlayer: rooms[turnRoomCode].currentPlayer,
                 })
               );
+            });
+
+            // If two cards are selected, check for match and update turn
+            if (data.selectedCards.length === 2) {
+              const isMatch =
+                data.selectedCards[0].name === data.selectedCards[1].name;
+              if (isMatch) {
+                rooms[turnRoomCode].playerScores[playerIndex]++;
+              }
+
+              // Change turn if no match
+              if (!isMatch) {
+                rooms[turnRoomCode].currentPlayer =
+                  (rooms[turnRoomCode].currentPlayer + 1) %
+                  rooms[turnRoomCode].players.length;
+              }
+
+              // Broadcast updated game state
+              setTimeout(() => {
+                rooms[turnRoomCode].players.forEach(({ ws: playerWs }) => {
+                  playerWs.send(
+                    JSON.stringify({
+                      type: "turnComplete",
+                      currentPlayer: rooms[turnRoomCode].currentPlayer,
+                      playerScores: rooms[turnRoomCode].playerScores,
+                      matchedPair: isMatch ? data.selectedCards : [],
+                    })
+                  );
+                });
+              }, 1000); // Give time for cards to be seen
             }
-          });
+          }
         }
         break;
+      }
     }
   });
 
   ws.on("close", () => {
     console.log("Client disconnected");
-    if (ws.roomCode && rooms[ws.roomCode]) {
-      rooms[ws.roomCode].players = rooms[ws.roomCode].players.filter(
-        (player) => player.ws !== ws
-      );
-      if (rooms[ws.roomCode].players.length === 0) {
-        delete rooms[ws.roomCode];
-        console.log("Room deleted:", ws.roomCode);
+    if (roomCode && rooms[roomCode]) {
+      const room = rooms[roomCode];
+      room.players = room.players.filter((player) => player.ws !== ws);
+
+      // Only delete room if it's empty and game hasn't started
+      if (room.players.length === 0 && !room.gameStarted) {
+        delete rooms[roomCode];
+        console.log("Room deleted:", roomCode);
+      } else {
+        // Notify remaining players about disconnection
+        room.players.forEach(({ ws: playerWs }) => {
+          playerWs.send(
+            JSON.stringify({
+              type: "playerDisconnected",
+              players: room.players.map((p) => p.name),
+            })
+          );
+        });
       }
     }
   });

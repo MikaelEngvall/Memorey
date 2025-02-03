@@ -350,3 +350,11 @@ Media queries
     padding: 0.3em 0;
     color: var(--dark-primary);
 }
+
+.error-message {
+    color: #dc2626;
+    background-color: #fee2e2;
+    padding: 0.5em;
+    border-radius: 0.25em;
+    margin: 0.5em 0;
+}

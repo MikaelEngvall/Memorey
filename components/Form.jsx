@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import RegularButton from './RegularButton';
 import Select from './Select';
 
-export default function Form({ handleSubmit, handleChange, formData }) {  // Add formData prop
-    const [roomCode, setRoomCode] = useState('');
+export default function Form({ handleSubmit, handleChange, formData, setRoomCode }) {  // Add formData and setRoomCode prop
+    const [roomCode, setRoomCodeLocal] = useState('');
     const [isRoomCreated, setIsRoomCreated] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('Disconnected');
     const [ws, setWs] = useState(null);
     const [players, setPlayers] = useState([]); // Initialize as empty array
     const [playerName, setPlayerName] = useState(`Player ${Math.floor(Math.random() * 1000)}`);
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [error, setError] = useState(null);
 
     const startGame = (e) => {
         e.preventDefault();
@@ -44,9 +46,11 @@ export default function Form({ handleSubmit, handleChange, formData }) {  // Add
             switch(data.type) {
                 case 'roomCreated':
                     console.log('Room created with code:', data.roomCode);
-                    setRoomCode(data.roomCode);
+                    setRoomCodeLocal(data.roomCode);
+                    setRoomCode(data.roomCode); // Update parent's roomCode
                     setIsRoomCreated(true);
-                    setPlayers(data.players || []); // Ensure players is an array
+                    setPlayers([playerName]); // Add self to players list immediately
+                    setIsAdmin(true);
                     break;
                 case 'roomJoined':
                     if (data.success) {
@@ -65,6 +69,10 @@ export default function Form({ handleSubmit, handleChange, formData }) {  // Add
                     console.log('Game started!', data.gameData);
                     handleSubmit(new Event('submit'));
                     break;
+                case 'error':
+                    setError(data.message);
+                    alert(data.message); // Show error to user
+                    break;
             }
         };
 
@@ -76,19 +84,24 @@ export default function Form({ handleSubmit, handleChange, formData }) {  // Add
     }, []);
 
     const createRoom = () => {
-        if (ws) {
-            ws.send(JSON.stringify({ type: 'createRoom' }));
+        if (ws && !isRoomCreated) { // Add check for isRoomCreated
+            ws.send(JSON.stringify({ 
+                type: 'createRoom',
+                playerName: playerName 
+            }));
         }
     };
 
     const joinRoom = () => {
-        if (ws) {
+        if (ws && !isRoomCreated) { // Add check for isRoomCreated
             console.log('Attempting to join room with code:', roomCode);
+            setError(null); // Clear any previous errors
             ws.send(JSON.stringify({ 
                 type: 'joinRoom',
                 roomCode: roomCode,
                 playerName: playerName
             }));
+            setRoomCode(roomCode); // Pass roomCode up to App
         }
     };
 
@@ -129,6 +142,11 @@ export default function Form({ handleSubmit, handleChange, formData }) {  // Add
                                 <p>No players in room yet</p>
                             )}
                         </div>
+                        {isAdmin && (
+                            <RegularButton handleClick={startGame}>
+                                Start Game
+                            </RegularButton>
+                        )}
                     </>
                 ) : (
                     <RegularButton handleClick={createRoom}>
@@ -138,12 +156,13 @@ export default function Form({ handleSubmit, handleChange, formData }) {  // Add
                 <input
                     type="text"
                     value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value)}
+                    onChange={(e) => setRoomCodeLocal(e.target.value)}
                     placeholder="Enter room code"
                 />
                 <RegularButton handleClick={joinRoom}>
                     Join Room
                 </RegularButton>
+                {error && <p className="error-message">{error}</p>}
             </div>
         </div>
     );

@@ -84,29 +84,50 @@ export default function App() {
         
         websocket.onmessage = async (event) => {
             const data = JSON.parse(event.data);
+            console.log('App received:', data);
             
-            if (data.type === 'gameStarted') {
-                setFormData(data.gameData);
-                if (data.emojisData && data.emojisData.length > 0) {
-                    // Use received emoji data if available
+            switch(data.type) {
+                case 'gameStarted':
+                    console.log('Game starting with data:', data);
+                    setFormData(data.gameData);
                     setEmojisData(data.emojisData);
+                    setCurrentPlayer(data.currentPlayer);
+                    setPlayerScores(data.playerScores);
                     setIsGameOn(true);
-                } else {
-                    // Initialize game if we're the host
-                    await startGame(new Event('submit'));
-                }
-            } else if (data.type === 'cardSelected') {
-                setSelectedCards(data.selectedCards);
-                setMatchedCards(data.matchedCards);
-                setCurrentPlayer(data.currentPlayer);
-                setPlayerScores(data.playerScores);
+                    break;
+
+                case 'cardFlipped':
+                    setSelectedCards(data.selectedCards);
+                    break;
+
+                case 'turnComplete':
+                    setCurrentPlayer(data.currentPlayer);
+                    setPlayerScores(data.playerScores);
+                    if (data.matchedPair.length) {
+                        setMatchedCards(prev => [...prev, ...data.matchedPair]);
+                    }
+                    setSelectedCards([]);
+                    break;
             }
+        };
+
+        websocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        websocket.onclose = () => {
+            console.log('WebSocket closed');
         };
 
         setWs(websocket);
         
-        return () => websocket.close();
-    }, []);
+        // Only close when component unmounts
+        return () => {
+            if (websocket.readyState === WebSocket.OPEN) {
+                websocket.close();
+            }
+        };
+    }, []); // Empty dependency array to run only once
     
     function handleFormChange(e) {
         setFormData(prevFormData => ({...prevFormData, [e.target.name]: e.target.value}))
@@ -245,22 +266,15 @@ export default function App() {
     }
     
     function turnCard(name, index) {
-        if (selectedCards.length < 2) {
+        // Only allow current player to flip cards
+        if (selectedCards.length < 2 && ws && roomCode) {
             const newSelectedCards = [...selectedCards, { name, index }];
-            setSelectedCards(newSelectedCards);
-            
-            if (ws && roomCode) {
-                ws.send(JSON.stringify({
-                    type: 'cardSelected',
-                    roomCode: roomCode,
-                    selectedCards: newSelectedCards,
-                    matchedCards,
-                    currentPlayer,
-                    playerScores
-                }));
-            }
-        } else if (selectedCards.length === 2) {
-            setSelectedCards([{ name, index }]);
+            ws.send(JSON.stringify({
+                type: 'turnCard',
+                roomCode: roomCode,
+                card: { name, index },
+                selectedCards: newSelectedCards,
+            }));
         }
     }
     
@@ -287,7 +301,8 @@ export default function App() {
                 <Form 
                     handleSubmit={startGame} 
                     handleChange={handleFormChange}
-                    formData={formData}  // Pass formData as prop
+                    formData={formData}
+                    setRoomCode={setRoomCode}  // Add this prop
                 />
             }
             {isLoading && <p>Loading game...</p>}
