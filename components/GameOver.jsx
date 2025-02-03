@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react'
 import RegularButton from './RegularButton'
 
-export default function GameOver({ handleClick, attempts, playerScores }) {
+export default function GameOver({ handleClick, playerScores }) {
     const divRef = useRef(null)
     
     useEffect(() => {
@@ -32,9 +32,7 @@ export default function GameOver({ handleClick, attempts, playerScores }) {
                     </div>
                 </>
             ) : (
-                <p className="p--regular">
-                    You matched all pairs in {attempts} attempts!
-                </p>
+                <p className="p--regular">Game Complete!</p>
             )}
             
             <RegularButton handleClick={handleClick}>

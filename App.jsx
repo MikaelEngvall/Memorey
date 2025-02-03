@@ -10,7 +10,7 @@ export default function App() {
     const initialFormData = {
         category: "animals-and-nature", 
         number: 10,
-        players: "1"  // Add players to initial form data
+        players: "1"
     }
     
     const [formData, setFormData] = useState(initialFormData)
@@ -20,22 +20,14 @@ export default function App() {
     const [matchedCards, setMatchedCards] = useState([])
     const [areAllCardsMatched, setAreAllCardsMatched] = useState(false)
     const [isError, setIsError] = useState(false)
-    const [attempts, setAttempts] = useState(0)  // Add attempts state
-    const [timeElapsed, setTimeElapsed] = useState(0)
-    const [isTimerActive, setIsTimerActive] = useState(false)
-    const [bestScore, setBestScore] = useState(
-        JSON.parse(localStorage.getItem('bestScore')) || {}
-    )
     const [currentPlayer, setCurrentPlayer] = useState(0)
     const [playerScores, setPlayerScores] = useState([])
     const [isLoading, setIsLoading] = useState(false)
-    const [ws, setWs] = useState(null);
-    const [roomCode, setRoomCode] = useState('');
+    const [ws, setWs] = useState(null)
+    const [roomCode, setRoomCode] = useState('')
 
-    // Add attempt counter when two cards are selected
     useEffect(() => {
         if (selectedCards.length === 2) {
-            setAttempts(prev => prev + 1)
             // Check for match
             if (selectedCards[0].name === selectedCards[1].name) {
                 setPlayerScores(prev => {
@@ -61,23 +53,8 @@ export default function App() {
     useEffect(() => {
         if (emojisData.length && matchedCards.length === emojisData.length) {
             setAreAllCardsMatched(true)
-            setIsTimerActive(false)
         }
     }, [matchedCards, emojisData])
-
-    useEffect(() => {
-        let interval
-        if (isGameOn && !areAllCardsMatched) {
-            setIsTimerActive(true)
-            interval = setInterval(() => {
-                setTimeElapsed(time => time + 1)
-            }, 1000)
-        }
-        return () => {
-            clearInterval(interval)
-            setIsTimerActive(false)
-        }
-    }, [isGameOn, areAllCardsMatched])
 
     useEffect(() => {
         const websocket = new WebSocket('ws://localhost:3000/ws');
@@ -142,7 +119,6 @@ export default function App() {
         e.preventDefault();
         setIsLoading(true);
         try {
-            setTimeElapsed(0);
             setCurrentPlayer(0);
             setPlayerScores(new Array(parseInt(formData.players)).fill(0));
             
@@ -284,14 +260,11 @@ export default function App() {
         }
     }
     
-    // Reset game function should clear attempts
     function resetGame() {
         setIsGameOn(false)
         setSelectedCards([])
         setMatchedCards([])
         setAreAllCardsMatched(false)
-        setAttempts(0)
-        setTimeElapsed(0)
         setCurrentPlayer(0)
         setPlayerScores([])
     }
@@ -321,8 +294,6 @@ export default function App() {
                     <GameStatus 
                         emojisData={emojisData} 
                         matchedCards={matchedCards}
-                        attempts={attempts}
-                        timeElapsed={timeElapsed}
                         currentPlayer={currentPlayer}
                         playerScores={playerScores || []}
                     />
