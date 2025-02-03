@@ -15,14 +15,20 @@ export default function Form({ handleSubmit, handleChange, formData, setRoomCode
     const startGame = (e) => {
         e.preventDefault();
         if (ws && roomCode) {
+            // Get the initial game data ready
+            const gameData = {
+                ...formData,
+                players: players.length.toString() // Use actual number of players
+            };
+            
             ws.send(JSON.stringify({
                 type: 'startGame',
                 roomCode: roomCode,
-                gameData: formData,  // Now formData is available from props
-                emojisData: [] // This will be filled by the host's game initialization
+                gameData: gameData,
+                emojisData: [] // Host will fill this
             }));
+            handleSubmit(e);
         }
-        handleSubmit(e);
     };
 
     useEffect(() => {

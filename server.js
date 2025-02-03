@@ -182,73 +182,65 @@ wss.on("connection", (ws) => {
           ).fill(0);
           rooms[startRoomCode].isGameStarted = true;
 
+          // Ensure all players get the game data
+          const gameStartData = {
+            type: "gameStarted",
+            gameData: data.gameData,
+            emojisData: data.emojisData,
+            currentPlayer: 0,
+            playerScores: rooms[startRoomCode].playerScores,
+          };
+
           rooms[startRoomCode].players.forEach(({ ws: playerWs }) => {
-            playerWs.send(
-              JSON.stringify({
-                type: "gameStarted",
-                gameData: data.gameData,
-                emojisData: data.emojisData,
-                currentPlayer: 0,
-                playerScores: rooms[startRoomCode].playerScores,
-              })
-            );
+            playerWs.send(JSON.stringify(gameStartData));
           });
-          rooms[startRoomCode].gameStarted = true;
         }
         break;
       }
 
       case "turnCard": {
         const turnRoomCode = data.roomCode;
-        if (rooms[turnRoomCode]) {
-          const playerIndex = rooms[turnRoomCode].players.findIndex(
-            (p) => p.ws === ws
-          );
+        const room = rooms[turnRoomCode];
+        if (room) {
+          // Broadcast card flip to all players immediately
+          const cardFlipData = {
+            type: "cardFlipped",
+            selectedCards: data.selectedCards,
+            currentPlayer: room.currentPlayer,
+          };
 
-          // Only allow current player to flip cards
-          if (playerIndex === rooms[turnRoomCode].currentPlayer) {
-            console.log("Processing card flip:", data.selectedCards); // Debug log
+          room.players.forEach(({ ws: playerWs }) => {
+            playerWs.send(JSON.stringify(cardFlipData));
+          });
 
-            // Broadcast card flip to all players immediately
-            rooms[turnRoomCode].players.forEach(({ ws: playerWs }) => {
-              playerWs.send(
-                JSON.stringify({
-                  type: "cardFlipped",
-                  selectedCards: data.selectedCards,
-                  currentPlayer: rooms[turnRoomCode].currentPlayer,
-                })
-              );
-            });
+          // If two cards are selected, process the turn
+          if (data.selectedCards.length === 2) {
+            const isMatch =
+              data.selectedCards[0].name === data.selectedCards[1].name;
 
-            // If two cards are selected, process the turn
-            if (data.selectedCards.length === 2) {
-              const isMatch =
-                data.selectedCards[0].name === data.selectedCards[1].name;
+            if (isMatch) {
+              rooms[turnRoomCode].playerScores[playerIndex]++;
+            }
 
-              if (isMatch) {
-                rooms[turnRoomCode].playerScores[playerIndex]++;
+            // Wait before completing the turn
+            setTimeout(() => {
+              if (!isMatch) {
+                rooms[turnRoomCode].currentPlayer =
+                  (rooms[turnRoomCode].currentPlayer + 1) %
+                  rooms[turnRoomCode].players.length;
               }
 
-              // Wait before completing the turn
-              setTimeout(() => {
-                if (!isMatch) {
-                  rooms[turnRoomCode].currentPlayer =
-                    (rooms[turnRoomCode].currentPlayer + 1) %
-                    rooms[turnRoomCode].players.length;
-                }
-
-                rooms[turnRoomCode].players.forEach(({ ws: playerWs }) => {
-                  playerWs.send(
-                    JSON.stringify({
-                      type: "turnComplete",
-                      currentPlayer: rooms[turnRoomCode].currentPlayer,
-                      playerScores: rooms[turnRoomCode].playerScores,
-                      matchedPair: isMatch ? data.selectedCards : [],
-                    })
-                  );
-                });
-              }, 1000);
-            }
+              rooms[turnRoomCode].players.forEach(({ ws: playerWs }) => {
+                playerWs.send(
+                  JSON.stringify({
+                    type: "turnComplete",
+                    currentPlayer: rooms[turnRoomCode].currentPlayer,
+                    playerScores: rooms[turnRoomCode].playerScores,
+                    matchedPair: isMatch ? data.selectedCards : [],
+                  })
+                );
+              });
+            }, 1000);
           }
         }
         break;

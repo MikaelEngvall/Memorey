@@ -90,7 +90,9 @@ export default function App() {
                 case 'gameStarted':
                     console.log('Game starting with data:', data);
                     setFormData(data.gameData);
-                    setEmojisData(data.emojisData);
+                    if (data.emojisData && data.emojisData.length > 0) {
+                        setEmojisData(data.emojisData);
+                    }
                     setCurrentPlayer(data.currentPlayer);
                     setPlayerScores(data.playerScores);
                     setIsGameOn(true);
@@ -98,7 +100,9 @@ export default function App() {
 
                 case 'cardFlipped':
                     console.log('Card flipped:', data.selectedCards); // Debug log
-                    setSelectedCards(data.selectedCards);
+                    if (data.selectedCards) {
+                        setSelectedCards(data.selectedCards);
+                    }
                     break;
 
                 case 'turnComplete':
@@ -269,17 +273,14 @@ export default function App() {
     }
     
     function turnCard(name, index) {
-        // Only allow clicking if it's this player's turn
-        const isMyTurn = currentPlayer === 0; // For testing, later use player index
-        
-        if (ws && roomCode && isMyTurn && selectedCards.length < 2) {
+        if (ws && roomCode) {
             // Don't allow clicking already selected or matched cards
             const isAlreadySelected = selectedCards.some(card => card.index === index);
             const isAlreadyMatched = matchedCards.some(card => card.index === index);
             
-            if (!isAlreadySelected && !isAlreadyMatched) {
+            if (!isAlreadySelected && !isAlreadyMatched && selectedCards.length < 2) {
                 const newSelectedCards = [...selectedCards, { name, index }];
-                console.log('Sending turnCard:', newSelectedCards); // Debug log
+                console.log('Sending turnCard:', newSelectedCards);
                 
                 ws.send(JSON.stringify({
                     type: 'turnCard',
@@ -287,6 +288,9 @@ export default function App() {
                     card: { name, index },
                     selectedCards: newSelectedCards,
                 }));
+
+                // Update local state immediately for better responsiveness
+                setSelectedCards(newSelectedCards);
             }
         }
     }
