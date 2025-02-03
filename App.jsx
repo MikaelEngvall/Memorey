@@ -97,16 +97,19 @@ export default function App() {
                     break;
 
                 case 'cardFlipped':
+                    console.log('Card flipped:', data.selectedCards); // Debug log
                     setSelectedCards(data.selectedCards);
                     break;
 
                 case 'turnComplete':
-                    setCurrentPlayer(data.currentPlayer);
-                    setPlayerScores(data.playerScores);
-                    if (data.matchedPair.length) {
-                        setMatchedCards(prev => [...prev, ...data.matchedPair]);
-                    }
-                    setSelectedCards([]);
+                    setTimeout(() => {
+                        setCurrentPlayer(data.currentPlayer);
+                        setPlayerScores(data.playerScores);
+                        if (data.matchedPair.length) {
+                            setMatchedCards(prev => [...prev, ...data.matchedPair]);
+                        }
+                        setSelectedCards([]);
+                    }, 500);
                     break;
             }
         };
@@ -266,15 +269,25 @@ export default function App() {
     }
     
     function turnCard(name, index) {
-        // Only allow current player to flip cards
-        if (selectedCards.length < 2 && ws && roomCode) {
-            const newSelectedCards = [...selectedCards, { name, index }];
-            ws.send(JSON.stringify({
-                type: 'turnCard',
-                roomCode: roomCode,
-                card: { name, index },
-                selectedCards: newSelectedCards,
-            }));
+        // Only allow clicking if it's this player's turn
+        const isMyTurn = currentPlayer === 0; // For testing, later use player index
+        
+        if (ws && roomCode && isMyTurn && selectedCards.length < 2) {
+            // Don't allow clicking already selected or matched cards
+            const isAlreadySelected = selectedCards.some(card => card.index === index);
+            const isAlreadyMatched = matchedCards.some(card => card.index === index);
+            
+            if (!isAlreadySelected && !isAlreadyMatched) {
+                const newSelectedCards = [...selectedCards, { name, index }];
+                console.log('Sending turnCard:', newSelectedCards); // Debug log
+                
+                ws.send(JSON.stringify({
+                    type: 'turnCard',
+                    roomCode: roomCode,
+                    card: { name, index },
+                    selectedCards: newSelectedCards,
+                }));
+            }
         }
     }
     

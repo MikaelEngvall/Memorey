@@ -14,10 +14,16 @@ export default function GameStatus({
         <section className="game-status">
             <div className="status-grid">
                 {playerScores.length > 1 && (
-                    <div className="status-item">
-                        <h3>Current Turn</h3>
-                        <span className="animate-number">Player {currentPlayer + 1}</span>
-                    </div>
+                    <>
+                        <div className="status-item">
+                            <h3>Current Turn</h3>
+                            <span className="animate-number">Player {currentPlayer + 1}</span>
+                        </div>
+                        <div className="status-item">
+                            <h3>Your Score</h3>
+                            <span className="animate-number">{playerScores[currentPlayer]}</span>
+                        </div>
+                    </>
                 )}
                 {playerScores.map((score, index) => (
                     <div key={index} className="status-item">

@@ -201,40 +201,42 @@ wss.on("connection", (ws) => {
       case "turnCard": {
         const turnRoomCode = data.roomCode;
         if (rooms[turnRoomCode]) {
-          // Only allow card flips from current player
           const playerIndex = rooms[turnRoomCode].players.findIndex(
             (p) => p.ws === ws
           );
+
+          // Only allow current player to flip cards
           if (playerIndex === rooms[turnRoomCode].currentPlayer) {
-            // Broadcast card flip to all players in room
+            console.log("Processing card flip:", data.selectedCards); // Debug log
+
+            // Broadcast card flip to all players immediately
             rooms[turnRoomCode].players.forEach(({ ws: playerWs }) => {
               playerWs.send(
                 JSON.stringify({
                   type: "cardFlipped",
-                  card: data.card,
                   selectedCards: data.selectedCards,
                   currentPlayer: rooms[turnRoomCode].currentPlayer,
                 })
               );
             });
 
-            // If two cards are selected, check for match and update turn
+            // If two cards are selected, process the turn
             if (data.selectedCards.length === 2) {
               const isMatch =
                 data.selectedCards[0].name === data.selectedCards[1].name;
+
               if (isMatch) {
                 rooms[turnRoomCode].playerScores[playerIndex]++;
               }
 
-              // Change turn if no match
-              if (!isMatch) {
-                rooms[turnRoomCode].currentPlayer =
-                  (rooms[turnRoomCode].currentPlayer + 1) %
-                  rooms[turnRoomCode].players.length;
-              }
-
-              // Broadcast updated game state
+              // Wait before completing the turn
               setTimeout(() => {
+                if (!isMatch) {
+                  rooms[turnRoomCode].currentPlayer =
+                    (rooms[turnRoomCode].currentPlayer + 1) %
+                    rooms[turnRoomCode].players.length;
+                }
+
                 rooms[turnRoomCode].players.forEach(({ ws: playerWs }) => {
                   playerWs.send(
                     JSON.stringify({
@@ -245,7 +247,7 @@ wss.on("connection", (ws) => {
                     })
                   );
                 });
-              }, 1000); // Give time for cards to be seen
+              }, 1000);
             }
           }
         }
