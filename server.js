@@ -1,10 +1,16 @@
 const express = require("express");
 const http = require("http");
-const socketIo = require("socket.io");
+const WebSocket = require("ws");
 const cors = require("cors");
 
 const app = express();
 const server = http.createServer(app);
+
+// Create WebSocket server with proper configuration
+const wss = new WebSocket.Server({
+  server,
+  path: "/ws", // Add specific path for WebSocket connections
+});
 
 // Enhanced CORS configuration
 const allowedOrigins = [
@@ -12,17 +18,6 @@ const allowedOrigins = [
   "https://3zt1l3c8-5175.euw.devtunnels.ms",
   // Remove trailing slash to handle both variants
 ];
-
-const io = socketIo(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Access-Control-Allow-Origin", "Content-Type"],
-    credentials: true,
-  },
-  transports: ["websocket", "polling"], // Add explicit transports
-  pingTimeout: 60000, // Increase timeout for tunneled connections
-});
 
 app.use(
   cors({
@@ -47,58 +42,137 @@ app.use((req, res, next) => {
   next();
 });
 
-io.use((socket, next) => {
-  socket.request.headers.origin = socket.request.headers.origin || "*";
-  next();
+// Add basic route for testing
+app.get("/health", (req, res) => {
+  res.send("Server is running");
 });
 
 const rooms = {};
 
-io.on("connect_error", (err) => {
-  console.log("Connection error:", err);
-});
+wss.on("connection", (ws) => {
+  console.log("Client connected");
 
-io.on("connection", (socket) => {
-  console.log(
-    `Client connected: ${socket.id} from ${socket.handshake.headers.origin}`
-  );
+  // Send initial connection confirmation
+  ws.send(JSON.stringify({ type: "connected", players: [] }));
 
-  socket.on("createRoom", (callback) => {
-    const roomCode = Math.random().toString(36).substring(2, 7);
-    rooms[roomCode] = { players: [] };
-    console.log("Room created with code:", roomCode);
-    callback(roomCode);
-  });
+  ws.on("message", (message) => {
+    const data = JSON.parse(message);
 
-  socket.on("joinRoom", (roomCode, callback) => {
-    console.log("Attempt to join room with code:", roomCode);
-    if (rooms[roomCode]) {
-      rooms[roomCode].players.push(socket.id);
-      socket.join(roomCode);
-      console.log("Client joined room:", roomCode);
-      socket.emit("roomJoined", roomCode);
-      callback(true);
-    } else {
-      console.log("Room not found:", roomCode);
-      callback(false);
+    switch (data.type) {
+      case "createRoom":
+        const roomCode = Math.random().toString(36).substring(2, 7);
+        rooms[roomCode] = {
+          players: [],
+          hostWs: ws,
+        };
+        ws.roomCode = roomCode;
+        ws.isHost = true;
+        console.log("Room created with code:", roomCode);
+        ws.send(
+          JSON.stringify({
+            type: "roomCreated",
+            roomCode: roomCode,
+            players: [],
+          })
+        );
+        break;
+
+      case "joinRoom":
+        const joinRoomCode = data.roomCode;
+        const playerName =
+          data.playerName ||
+          `Player ${rooms[joinRoomCode]?.players.length + 1}`;
+
+        if (rooms[joinRoomCode]) {
+          rooms[joinRoomCode].players.push({
+            ws,
+            name: playerName,
+          });
+          ws.roomCode = joinRoomCode;
+
+          // Broadcast to all players in the room
+          const playersList = rooms[joinRoomCode].players.map((p) => p.name);
+          rooms[joinRoomCode].players.forEach(({ ws: playerWs }) => {
+            playerWs.send(
+              JSON.stringify({
+                type: "roomUpdate",
+                roomCode: joinRoomCode,
+                players: playersList,
+              })
+            );
+          });
+
+          ws.send(
+            JSON.stringify({
+              type: "roomJoined",
+              success: true,
+              roomCode: joinRoomCode,
+              players: playersList,
+            })
+          );
+        } else {
+          ws.send(
+            JSON.stringify({
+              type: "roomJoined",
+              success: false,
+            })
+          );
+        }
+        break;
+
+      case "startGame":
+        const startRoomCode = data.roomCode;
+        if (rooms[startRoomCode]) {
+          // Store game data in room
+          rooms[startRoomCode].gameData = data.gameData;
+          rooms[startRoomCode].emojisData = data.emojisData; // Add this
+
+          // Broadcast game start to all players in the room
+          rooms[startRoomCode].players.forEach(({ ws: playerWs }) => {
+            playerWs.send(
+              JSON.stringify({
+                type: "gameStarted",
+                gameData: data.gameData,
+                emojisData: data.emojisData, // Add this
+              })
+            );
+          });
+        }
+        break;
+
+      case "cardSelected":
+        const roomCode = data.roomCode;
+        if (rooms[roomCode]) {
+          // Broadcast card selection to all players in room
+          rooms[roomCode].players.forEach(({ ws: playerWs }) => {
+            if (playerWs !== ws) {
+              playerWs.send(
+                JSON.stringify({
+                  type: "cardSelected",
+                  selectedCards: data.selectedCards,
+                  matchedCards: data.matchedCards,
+                  currentPlayer: data.currentPlayer,
+                  playerScores: data.playerScores,
+                })
+              );
+            }
+          });
+        }
+        break;
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-    for (const roomCode in rooms) {
-      rooms[roomCode].players = rooms[roomCode].players.filter(
-        (id) => id !== socket.id
+  ws.on("close", () => {
+    console.log("Client disconnected");
+    if (ws.roomCode && rooms[ws.roomCode]) {
+      rooms[ws.roomCode].players = rooms[ws.roomCode].players.filter(
+        (player) => player.ws !== ws
       );
-      if (rooms[roomCode].players.length === 0) {
-        delete rooms[roomCode];
-        console.log("Room deleted:", roomCode);
+      if (rooms[ws.roomCode].players.length === 0) {
+        delete rooms[ws.roomCode];
+        console.log("Room deleted:", ws.roomCode);
       }
     }
-  });
-
-  socket.on("error", (error) => {
-    console.log("Socket error:", error);
   });
 });
 
@@ -109,4 +183,5 @@ process.on("unhandledRejection", (reason, promise) => {
 
 server.listen(3000, "0.0.0.0", () => {
   console.log("Server running on port 3000");
+  console.log("WebSocket server is running on ws://localhost:3000/ws");
 });

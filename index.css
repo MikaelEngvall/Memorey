@@ -198,7 +198,7 @@ Game
 .btn--emoji__front:hover,
 .btn--emoji__front:focus {
     background-color: var(--accent);
-    border: 2px solid var(--dark-primary);
+    border: 2px solid var (--dark-primary);
     box-shadow: 0 0 5px 2px var(--light-primary);
     cursor: pointer;
 }
@@ -331,4 +331,22 @@ Media queries
     color: var(--dark-primary);
     font-size: 1.5rem;
     margin-bottom: 0.5em;
+}
+
+.players-list {
+    margin: 1em 0;
+    padding: 1em;
+    background: var(--light-secondary);
+    border-radius: 0.5em;
+}
+
+.players-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0.5em 0;
+}
+
+.players-list li {
+    padding: 0.3em 0;
+    color: var(--dark-primary);
 }

@@ -29,6 +29,8 @@ export default function App() {
     const [currentPlayer, setCurrentPlayer] = useState(0)
     const [playerScores, setPlayerScores] = useState([])
     const [isLoading, setIsLoading] = useState(false)
+    const [ws, setWs] = useState(null);
+    const [roomCode, setRoomCode] = useState('');
 
     // Add attempt counter when two cards are selected
     useEffect(() => {
@@ -76,18 +78,47 @@ export default function App() {
             setIsTimerActive(false)
         }
     }, [isGameOn, areAllCardsMatched])
+
+    useEffect(() => {
+        const websocket = new WebSocket('ws://localhost:3000/ws');
+        
+        websocket.onmessage = async (event) => {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'gameStarted') {
+                setFormData(data.gameData);
+                if (data.emojisData && data.emojisData.length > 0) {
+                    // Use received emoji data if available
+                    setEmojisData(data.emojisData);
+                    setIsGameOn(true);
+                } else {
+                    // Initialize game if we're the host
+                    await startGame(new Event('submit'));
+                }
+            } else if (data.type === 'cardSelected') {
+                setSelectedCards(data.selectedCards);
+                setMatchedCards(data.matchedCards);
+                setCurrentPlayer(data.currentPlayer);
+                setPlayerScores(data.playerScores);
+            }
+        };
+
+        setWs(websocket);
+        
+        return () => websocket.close();
+    }, []);
     
     function handleFormChange(e) {
         setFormData(prevFormData => ({...prevFormData, [e.target.name]: e.target.value}))
     }
     
     async function startGame(e) {
-        e.preventDefault()
-        setIsLoading(true)
+        e.preventDefault();
+        setIsLoading(true);
         try {
-            setTimeElapsed(0)
-            setCurrentPlayer(0)
-            setPlayerScores(new Array(parseInt(formData.players)).fill(0))
+            setTimeElapsed(0);
+            setCurrentPlayer(0);
+            setPlayerScores(new Array(parseInt(formData.players)).fill(0));
             
             let data;
             
@@ -110,13 +141,22 @@ export default function App() {
             const dataSlice = await getDataSlice(data)
             const cardsArray = await getEmojisArray(dataSlice)
             
+            if (ws && roomCode) {
+                ws.send(JSON.stringify({
+                    type: 'startGame',
+                    roomCode: roomCode,
+                    gameData: formData,
+                    emojisData: cardsArray
+                }));
+            }
+            
             setEmojisData(cardsArray)
             setIsGameOn(true)
         } catch(err) {
-            console.error(err)
-            setIsError(true)
+            console.error(err);
+            setIsError(true);
         } finally {
-            setIsLoading(false)
+            setIsLoading(false);
         }   
     }
 
@@ -206,12 +246,21 @@ export default function App() {
     
     function turnCard(name, index) {
         if (selectedCards.length < 2) {
-            setSelectedCards(prevSelectedCards => [...prevSelectedCards, { name, index }])
-            if (selectedCards.length === 1) {
-                setAttempts(prev => prev + 1) // Increment on second card
+            const newSelectedCards = [...selectedCards, { name, index }];
+            setSelectedCards(newSelectedCards);
+            
+            if (ws && roomCode) {
+                ws.send(JSON.stringify({
+                    type: 'cardSelected',
+                    roomCode: roomCode,
+                    selectedCards: newSelectedCards,
+                    matchedCards,
+                    currentPlayer,
+                    playerScores
+                }));
             }
         } else if (selectedCards.length === 2) {
-            setSelectedCards([{ name, index }])
+            setSelectedCards([{ name, index }]);
         }
     }
     
@@ -235,7 +284,11 @@ export default function App() {
         <main>
             <h1>Memory</h1>
             {!isGameOn && !isError &&
-                <Form handleSubmit={startGame} handleChange={handleFormChange} />
+                <Form 
+                    handleSubmit={startGame} 
+                    handleChange={handleFormChange}
+                    formData={formData}  // Pass formData as prop
+                />
             }
             {isLoading && <p>Loading game...</p>}
             {isGameOn && !areAllCardsMatched && !isLoading &&
