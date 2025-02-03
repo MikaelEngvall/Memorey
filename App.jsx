@@ -25,6 +25,7 @@ export default function App() {
     const [isLoading, setIsLoading] = useState(false)
     const [ws, setWs] = useState(null)
     const [roomCode, setRoomCode] = useState('')
+    const [playerIndex, setPlayerIndex] = useState(0); // Add this state
 
     useEffect(() => {
         if (selectedCards.length === 2) {
@@ -77,18 +78,29 @@ export default function App() {
 
                 case 'cardFlipped':
                     console.log('Card flipped:', data.selectedCards);
-                    if (Array.isArray(data.selectedCards)) {
-                        setSelectedCards(data.selectedCards);
-                    }
+                    // Update selected cards immediately for visual feedback
+                    setSelectedCards(data.selectedCards);
                     break;
 
                 case 'turnComplete':
+                    // Wait a moment before completing the turn
                     setTimeout(() => {
+                        if (data.wasMatch) {
+                            setMatchedCards(data.matchedCards);
+                        }
                         setCurrentPlayer(data.currentPlayer);
                         setPlayerScores(data.playerScores);
-                        setMatchedCards(data.matchedCards || []);
                         setSelectedCards([]); // Clear selected cards
                     }, 500);
+                    break;
+
+                case 'roomJoined':
+                    // Set player's index when joining room
+                    setPlayerIndex(data.playerIndex);
+                    break;
+                case 'roomCreated':
+                    // Host is always player 0
+                    setPlayerIndex(0);
                     break;
             }
         };
@@ -248,15 +260,23 @@ export default function App() {
     
     function turnCard(name, index) {
         if (ws && roomCode) {
-            // Get player index from the room
-            const newSelectedCards = [...selectedCards, { name, index }];
+            // Now we can use playerIndex
+            const isMyTurn = currentPlayer === playerIndex;
             
-            ws.send(JSON.stringify({
-                type: 'turnCard',
-                roomCode: roomCode,
-                card: { name, index },
-                selectedCards: newSelectedCards,
-            }));
+            if (isMyTurn && selectedCards.length < 2) {
+                const isAlreadySelected = selectedCards.some(card => card.index === index);
+                const isAlreadyMatched = matchedCards.some(card => card.index === index);
+                
+                if (!isAlreadySelected && !isAlreadyMatched) {
+                    const newSelectedCards = [...selectedCards, { name, index }];
+                    ws.send(JSON.stringify({
+                        type: 'turnCard',
+                        roomCode: roomCode,
+                        card: { name, index },
+                        selectedCards: newSelectedCards,
+                    }));
+                }
+            }
         }
     }
     

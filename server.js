@@ -96,6 +96,7 @@ wss.on("connection", (ws) => {
             roomCode: roomCode,
             players: [playerName],
             isAdmin: true,
+            playerIndex: 0, // Add this
           })
         );
         break;
@@ -118,6 +119,7 @@ wss.on("connection", (ws) => {
           `Player ${rooms[joinRoomCode]?.players.length + 1}`;
 
         if (rooms[joinRoomCode]) {
+          const playerIndex = rooms[joinRoomCode].players.length;
           // Check if player name already exists in room
           const playerExists = rooms[joinRoomCode].players.some(
             (p) => p.name === data.playerName
@@ -158,6 +160,7 @@ wss.on("connection", (ws) => {
               success: true,
               roomCode: joinRoomCode,
               players: playersList,
+              playerIndex: playerIndex, // Add this
             })
           );
           ws.isJoined = true;
@@ -199,42 +202,42 @@ wss.on("connection", (ws) => {
           const playerIndex = room.players.findIndex((p) => p.ws === ws);
 
           if (playerIndex === room.gameState.currentPlayer) {
-            // Update game state
+            // Update and broadcast card flip immediately
             room.gameState.selectedCards = data.selectedCards;
 
-            // Broadcast card flip immediately
+            // Broadcast the card flip to all players
             broadcastToRoom(room, {
               type: "cardFlipped",
+              cardData: data.card, // Include the specific card data
               selectedCards: room.gameState.selectedCards,
               currentPlayer: room.gameState.currentPlayer,
             });
 
+            // If second card, check for match after delay
             if (data.selectedCards.length === 2) {
               const isMatch =
                 data.selectedCards[0].name === data.selectedCards[1].name;
 
-              if (isMatch) {
-                room.gameState.playerScores[playerIndex]++;
-                room.gameState.matchedCards = [
-                  ...room.gameState.matchedCards,
-                  ...data.selectedCards,
-                ];
-              }
-
               setTimeout(() => {
-                if (!isMatch) {
+                if (isMatch) {
+                  room.gameState.playerScores[playerIndex]++;
+                  room.gameState.matchedCards = [
+                    ...room.gameState.matchedCards,
+                    ...data.selectedCards,
+                  ];
+                } else {
                   room.gameState.currentPlayer =
                     (room.gameState.currentPlayer + 1) % room.players.length;
                 }
-                room.gameState.selectedCards = [];
 
-                // Broadcast updated game state
+                // Broadcast turn result
                 broadcastToRoom(room, {
                   type: "turnComplete",
                   currentPlayer: room.gameState.currentPlayer,
                   playerScores: room.gameState.playerScores,
                   matchedCards: room.gameState.matchedCards,
-                  matchedPair: isMatch ? data.selectedCards : [],
+                  selectedCards: [], // Clear selected cards
+                  wasMatch: isMatch,
                 });
               }, 1000);
             }
