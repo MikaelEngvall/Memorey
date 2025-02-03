@@ -25,37 +25,7 @@ export default function App() {
     const [isLoading, setIsLoading] = useState(false)
     const [ws, setWs] = useState(null)
     const [roomCode, setRoomCode] = useState('')
-    const [playerIndex, setPlayerIndex] = useState(0); // Add this state
-
-    useEffect(() => {
-        if (selectedCards.length === 2) {
-            // Check for match
-            if (selectedCards[0].name === selectedCards[1].name) {
-                setPlayerScores(prev => {
-                    const newScores = [...prev]
-                    newScores[currentPlayer]++
-                    return newScores
-                })
-            } else {
-                // Switch to next player if no match
-                setCurrentPlayer(prev => 
-                    (prev + 1) % parseInt(formData.players)
-                )
-            }
-        }
-    }, [selectedCards])
-
-    useEffect(() => {
-        if (selectedCards.length === 2 && selectedCards[0].name === selectedCards[1].name) {
-            setMatchedCards(prevMatchedCards => [...prevMatchedCards, ...selectedCards])
-        }
-    }, [selectedCards])
-    
-    useEffect(() => {
-        if (emojisData.length && matchedCards.length === emojisData.length) {
-            setAreAllCardsMatched(true)
-        }
-    }, [matchedCards, emojisData])
+    const [playerIndex, setPlayerIndex] = useState(0)
 
     useEffect(() => {
         const websocket = new WebSocket('ws://localhost:3000/ws');
@@ -328,7 +298,6 @@ export default function App() {
             {areAllCardsMatched && 
                 <GameOver 
                     handleClick={resetGame} 
-                    attempts={attempts}
                     playerScores={playerScores}
                 />
             }
