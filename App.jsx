@@ -90,30 +90,26 @@ export default function App() {
                 case 'gameStarted':
                     console.log('Game starting with data:', data);
                     setFormData(data.gameData);
-                    if (data.emojisData && data.emojisData.length > 0) {
-                        setEmojisData(data.emojisData);
-                    }
+                    setEmojisData(data.emojisData);
                     setCurrentPlayer(data.currentPlayer);
                     setPlayerScores(data.playerScores);
+                    setSelectedCards(data.selectedCards || []);
+                    setMatchedCards(data.matchedCards || []);
                     setIsGameOn(true);
                     break;
 
                 case 'cardFlipped':
-                    console.log('Card flipped:', data.selectedCards); // Debug log
-                    if (data.selectedCards) {
-                        setSelectedCards(data.selectedCards);
-                    }
+                    console.log('Card flipped:', data.selectedCards);
+                    setSelectedCards(data.selectedCards);
                     break;
 
                 case 'turnComplete':
-                    setTimeout(() => {
-                        setCurrentPlayer(data.currentPlayer);
-                        setPlayerScores(data.playerScores);
-                        if (data.matchedPair.length) {
-                            setMatchedCards(prev => [...prev, ...data.matchedPair]);
-                        }
-                        setSelectedCards([]);
-                    }, 500);
+                    setCurrentPlayer(data.currentPlayer);
+                    setPlayerScores(data.playerScores);
+                    if (data.matchedCards) {
+                        setMatchedCards(data.matchedCards);
+                    }
+                    setSelectedCards([]);
                     break;
             }
         };
@@ -274,11 +270,11 @@ export default function App() {
     
     function turnCard(name, index) {
         if (ws && roomCode) {
-            // Don't allow clicking already selected or matched cards
+            const isMyTurn = currentPlayer === 0; // This should be based on player index
             const isAlreadySelected = selectedCards.some(card => card.index === index);
             const isAlreadyMatched = matchedCards.some(card => card.index === index);
             
-            if (!isAlreadySelected && !isAlreadyMatched && selectedCards.length < 2) {
+            if (isMyTurn && !isAlreadySelected && !isAlreadyMatched && selectedCards.length < 2) {
                 const newSelectedCards = [...selectedCards, { name, index }];
                 console.log('Sending turnCard:', newSelectedCards);
                 
@@ -288,9 +284,6 @@ export default function App() {
                     card: { name, index },
                     selectedCards: newSelectedCards,
                 }));
-
-                // Update local state immediately for better responsiveness
-                setSelectedCards(newSelectedCards);
             }
         }
     }
