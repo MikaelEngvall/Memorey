@@ -60,6 +60,7 @@ wss.on("connection", (ws) => {
   ws.on("message", (message) => {
     const data = JSON.parse(message);
     console.log("Server received:", data);
+    const room = rooms[data.roomCode];
 
     switch (data.type) {
       case "createRoom": {
@@ -172,59 +173,40 @@ wss.on("connection", (ws) => {
       }
 
       case "startGame": {
-        const startRoomCode = data.roomCode;
-        if (rooms[startRoomCode] && rooms[startRoomCode].isActive) {
-          // Store the game state in the room
-          rooms[startRoomCode] = {
-            ...rooms[startRoomCode],
+        if (room && room.isActive) {
+          // Store complete game state
+          room.gameState = {
             gameData: data.gameData,
             emojisData: data.emojisData,
             currentPlayer: 0,
-            playerScores: new Array(rooms[startRoomCode].players.length).fill(
-              0
-            ),
-            isGameStarted: true,
+            playerScores: new Array(room.players.length).fill(0),
             selectedCards: [],
             matchedCards: [],
+            isGameStarted: true,
           };
 
-          // Send the complete game state to all players
-          rooms[startRoomCode].players.forEach(({ ws: playerWs }) => {
-            playerWs.send(
-              JSON.stringify({
-                type: "gameStarted",
-                gameData: data.gameData,
-                emojisData: data.emojisData,
-                currentPlayer: 0,
-                playerScores: rooms[startRoomCode].playerScores,
-                selectedCards: [],
-                matchedCards: [],
-              })
-            );
+          // Broadcast complete game state to all players
+          broadcastToRoom(room, {
+            type: "gameStarted",
+            ...room.gameState,
           });
         }
         break;
       }
 
       case "turnCard": {
-        const turnRoomCode = data.roomCode;
-        const room = rooms[turnRoomCode];
-        if (room) {
+        if (room && room.gameState) {
           const playerIndex = room.players.findIndex((p) => p.ws === ws);
 
-          if (playerIndex === room.currentPlayer) {
-            // Update the room's selected cards
-            room.selectedCards = data.selectedCards;
+          if (playerIndex === room.gameState.currentPlayer) {
+            // Update game state
+            room.gameState.selectedCards = data.selectedCards;
 
-            // Broadcast the card flip to ALL players immediately
-            const cardFlipData = {
+            // Broadcast card flip immediately
+            broadcastToRoom(room, {
               type: "cardFlipped",
-              selectedCards: room.selectedCards,
-              currentPlayer: room.currentPlayer,
-            };
-
-            room.players.forEach(({ ws: playerWs }) => {
-              playerWs.send(JSON.stringify(cardFlipData));
+              selectedCards: room.gameState.selectedCards,
+              currentPlayer: room.gameState.currentPlayer,
             });
 
             if (data.selectedCards.length === 2) {
@@ -232,32 +214,27 @@ wss.on("connection", (ws) => {
                 data.selectedCards[0].name === data.selectedCards[1].name;
 
               if (isMatch) {
-                room.playerScores[playerIndex]++;
-                room.matchedCards = [
-                  ...room.matchedCards,
+                room.gameState.playerScores[playerIndex]++;
+                room.gameState.matchedCards = [
+                  ...room.gameState.matchedCards,
                   ...data.selectedCards,
                 ];
               }
 
               setTimeout(() => {
                 if (!isMatch) {
-                  room.currentPlayer =
-                    (room.currentPlayer + 1) % room.players.length;
+                  room.gameState.currentPlayer =
+                    (room.gameState.currentPlayer + 1) % room.players.length;
                 }
+                room.gameState.selectedCards = [];
 
-                room.selectedCards = [];
-
-                // Send turn completion to all players
-                room.players.forEach(({ ws: playerWs }) => {
-                  playerWs.send(
-                    JSON.stringify({
-                      type: "turnComplete",
-                      currentPlayer: room.currentPlayer,
-                      playerScores: room.playerScores,
-                      matchedCards: room.matchedCards,
-                      matchedPair: isMatch ? data.selectedCards : [],
-                    })
-                  );
+                // Broadcast updated game state
+                broadcastToRoom(room, {
+                  type: "turnComplete",
+                  currentPlayer: room.gameState.currentPlayer,
+                  playerScores: room.gameState.playerScores,
+                  matchedCards: room.gameState.matchedCards,
+                  matchedPair: isMatch ? data.selectedCards : [],
                 });
               }, 1000);
             }
@@ -292,6 +269,14 @@ wss.on("connection", (ws) => {
     }
   });
 });
+
+function broadcastToRoom(room, message) {
+  room.players.forEach(({ ws }) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  });
+}
 
 // Add error handler for unhandled promises
 process.on("unhandledRejection", (reason, promise) => {
